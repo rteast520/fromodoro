@@ -1,14 +1,40 @@
 use console_utils::{input::select, input::input};
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
+use std::process::exit;
 use std::time;//::duration
 use std::thread;
+use k_board::termio::{restore, setup_raw_mode, termios};
+use std::io::{Read, Write};
+
 
 //#[derive(Parser)]
 //struct Pomo{
 //    focus:i32,
 //    rest:i32,
 //}
+
+
+pub fn get_key() -> std::io::Result<u32>  {
+    let termios_enviroment: termios = setup_raw_mode()?;
+    std::io::stdout().flush().unwrap();
+    let mut buffer: [u8; 3] = [0; 3];
+    #[allow(clippy::unused_io_amount)]
+    std::io::stdin().read(&mut buffer)?;
+    let mut ret:u32 = 0;
+    if buffer[0] != 0x00 {
+        /*println!(
+            "[0x{:x?}, 0x{:x?}, 0x{:x?}]",
+            buffer[0], buffer[1], buffer[2]
+        );*/
+        if buffer[0] == 0x71{ret = 1;} //checks for q
+        if buffer[0] == 0x70{ret = 2;} //checks for p 
+        if buffer[0] == 0x73{ret = 3;} //checks for s
+    }
+    std::io::stdout().flush().unwrap();
+    restore(&termios_enviroment)?; 
+    Ok(ret)
+}
 
 fn init_bar(bar_color:&str)->ProgressBar{
     let bar = ProgressBar::new(600);
@@ -37,7 +63,7 @@ fn get_time(options:[&str;4], switcher: bool)->i32{
     } else {
          time = if switcher {check_focus(selected_index)} else {check_break(selected_index)};    
     }
-    println!("{}", time);
+    //println!("{}", time);
     time
 }
 
@@ -58,22 +84,56 @@ fn check_break(input: usize)->i32{
     }
 }
 
+fn event_handler(event: u32)->bool{
+    if event == 1{
+        //quit = 1;
+        exit(0);
+    } else if event == 2{
+        let sleepy = time::Duration::from_millis(200);
+        loop{
+            let p = get_key().unwrap();
+            if p==2{
+                break;
+            }else if p ==1{
+                //quit = 1;
+                exit(0);
+                //break;
+            }else if p == 3{
+                return true;
+            }
+            thread::sleep(sleepy);
+        }
+    }else if event==3{
+        return true;
+    }
+
+    false
+}
+
 
 fn set_bar(time_focus:i32, bar_color:&str){
     //logic for visual bar
     let bar = init_bar(bar_color);
     let sleepy = time::Duration::from_millis(999);
-    //println!("{}",timeFocus);
+    //println!("{}",timeFocus);2
     let period = if time_focus*60 < 600 {600/(time_focus*60)} else {(time_focus*60)/600};
     //start loop for incr time
     for i in 1..time_focus * 60{ //TODO: fix calc to be consistent maybe floats that check how much
+        thread::sleep(sleepy);
         //to add to each line
         if i%period == 0{
             incr_bar(&bar, 1);
         }else{
             incr_bar(&bar, 0);
         }
-        thread::sleep(sleepy);
+        //keyboard inturupt handling
+        let event = get_key().unwrap();
+        if event != 0{
+            if event_handler(event){
+                break;
+            }
+        }        
+    
     }
     bar.finish();
 
@@ -86,8 +146,11 @@ fn main() {
     //get break times
     let time_break = get_time([">5 Minutes", ">10 Minutes", ">15 Minutes", ">Custom"], false);
     loop{
+       
         set_bar(time_focus,"cyan");
+        //if quit!=0{exit(0);} 
         set_bar(time_break, "210");
+        //if quit!=0{exit(0)}
         let options = [">Continue", ">Quit"];
         let selected_index = select("<------>", &options);
         if selected_index != 0{break;}
