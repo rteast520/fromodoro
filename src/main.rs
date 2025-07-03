@@ -1,18 +1,13 @@
+#![feature(thread_sleep_until)]
 use console_utils::{input::select, input::input};
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 use std::process::exit;
 use std::time;//::duration
 use std::thread;
+use std::time::Instant;
 use k_board::termio::{restore, setup_raw_mode, termios};
 use std::io::{Read, Write};
-
-
-//#[derive(Parser)]
-//struct Pomo{
-//    focus:i32,
-//    rest:i32,
-//}
 
 
 pub fn get_key() -> std::io::Result<u32>  {
@@ -38,6 +33,7 @@ pub fn get_key() -> std::io::Result<u32>  {
 
 fn init_bar(bar_color:&str)->ProgressBar{
     let bar = ProgressBar::new(600);
+    //add percent for debug [{percent:>.cyan}]
     let format = "{bar:>80.".to_owned() + bar_color +"/61} [{elapsed:>.cyan}] {msg:>.12}";
     bar.set_style(ProgressStyle::with_template(format.as_str())//alt color 210
     .unwrap());
@@ -63,7 +59,6 @@ fn get_time(options:[&str;4], switcher: bool)->i32{
     } else {
          time = if switcher {check_focus(selected_index)} else {check_break(selected_index)};    
     }
-    //println!("{}", time);
     time
 }
 
@@ -110,28 +105,33 @@ fn event_handler(event: u32)->bool{
     false
 }
 
-
 fn set_bar(time_focus:i32, bar_color:&str){
     //logic for visual bar
+    //println!("{}",time_focus as f64*120.0/600.0);
     let bar = init_bar(bar_color);
-    let sleepy = time::Duration::from_millis(999);
-    //println!("{}",timeFocus);2
-    let period = if time_focus*60 < 600 {600/(time_focus*60)} else {(time_focus*60)/600};
+    let sleepy = time::Duration::from_millis(500);
+    let period:f64 = if time_focus*120 < 600 {600.0/(time_focus as f64*120.0)} else {(time_focus as f64*120.0)/600.0};
     //start loop for incr time
-    for i in 1..time_focus * 60{ //TODO: fix calc to be consistent maybe floats that check how much
-        thread::sleep(sleepy);
+    let mut progress = period; 
+    let mut next_start = Instant::now();
+    for i in 1..time_focus * 120{ //TODO: fix calc to be consistent maybe floats that check how much
+        next_start+=sleepy;
+        thread::sleep_until(next_start);
         //to add to each line
-        if i%period == 0{
+        if i as f64>=progress{
             incr_bar(&bar, 1);
+            progress += period;
         }else{
             incr_bar(&bar, 0);
         }
+        //println!("{}", progress);
         //keyboard inturupt handling
         let event = get_key().unwrap();
         if event != 0{
             if event_handler(event){
                 break;
             }
+            next_start = Instant::now();
         }        
     
     }
@@ -140,11 +140,12 @@ fn set_bar(time_focus:i32, bar_color:&str){
 }
 
 fn main() {
-
+    //kept all in main due to small program
     //get focus times
     let  time_focus = get_time([">25 Minutes", ">30 Minutes", ">40 Minutes", ">Custom"], true);
     //get break times
     let time_break = get_time([">5 Minutes", ">10 Minutes", ">15 Minutes", ">Custom"], false);
+    //start main loop for program
     loop{
        
         set_bar(time_focus,"cyan");
@@ -157,6 +158,6 @@ fn main() {
     }
 
 
-    println!("Hello, world!");
+    //println!("Hello, world!");
 
 }
